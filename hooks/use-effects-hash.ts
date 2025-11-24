@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
+import LZString from "lz-string"
 
 interface EffectSettings {
   displacement: number
@@ -20,13 +21,27 @@ interface EffectSettings {
 
 export function useEffectsHash() {
   const encodeEffectsToHash = useCallback((effects: EffectSettings): string => {
-    const encoded = encodeURIComponent(JSON.stringify(effects))
-    return encoded
+    // Hyperoptimized encoding: JSON -> LZ compression -> URL-safe base64
+    const json = JSON.stringify(effects)
+    const compressed = LZString.compressToEncodedURIComponent(json)
+    return compressed
   }, [])
 
   const decodeHashToEffects = useCallback((encoded: string): Partial<EffectSettings> | null => {
     try {
       if (!encoded) return null
+      
+      // Try compressed format first (new hyperoptimized format)
+      try {
+        const decompressed = LZString.decompressFromEncodedURIComponent(encoded)
+        if (decompressed) {
+          return JSON.parse(decompressed)
+        }
+      } catch (e) {
+        // Fall through to legacy format
+      }
+      
+      // Fallback to legacy uncompressed format for backward compatibility
       const decoded = decodeURIComponent(encoded)
       return JSON.parse(decoded)
     } catch (error) {
